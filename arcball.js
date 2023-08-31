@@ -4,126 +4,140 @@
  * so the mouse positions can be normalized into [-1, 1] from the pixel
  * coordinates.
  */
-var ArcballCamera = function(eye, center, up, zoomSpeed, screenDims) {
-    var veye = vec3.set(vec3.create(), eye[0], eye[1], eye[2]);
-    var vcenter = vec3.set(vec3.create(), center[0], center[1], center[2]);
-    var vup = vec3.set(vec3.create(), up[0], up[1], up[2]);
-    vec3.normalize(vup, vup);
 
-    var zAxis = vec3.sub(vec3.create(), vcenter, veye);
-    var viewDist = vec3.len(zAxis);
-    vec3.normalize(zAxis, zAxis);
+import {vec2, vec3, vec4, mat3, mat4, quat} from "./libs/wgpu-matrix/wgpu-matrix.module.js";
 
-    var xAxis = vec3.cross(vec3.create(), zAxis, vup);
-    vec3.normalize(xAxis, xAxis);
+export class ArcballCamera 
+{
+    constructor(eye, center, up, zoomSpeed, screenDims)
+    {
+        const veye = vec3.create(eye[0], eye[1], eye[2]);
+        const vcenter = vec3.create(center[0], center[1], center[2]);
+        const vup = vec3.create(up[0], up[1], up[2]);
+        vec3.normalize(vup, vup);
 
-    var yAxis = vec3.cross(vec3.create(), xAxis, zAxis);
-    vec3.normalize(yAxis, yAxis);
+        const zAxis = vec3.sub(vcenter, veye);
+        const viewDist = vec3.len(zAxis);
+        vec3.normalize(zAxis, zAxis);
 
-    vec3.cross(xAxis, zAxis, yAxis);
-    vec3.normalize(xAxis, xAxis);
+        const xAxis = vec3.cross(zAxis, vup);
+        vec3.normalize(xAxis, xAxis);
 
-    this.zoomSpeed = zoomSpeed;
-    this.invScreen = [1.0 / screenDims[0], 1.0 / screenDims[1]];
+        const yAxis = vec3.cross(xAxis, zAxis);
+        vec3.normalize(yAxis, yAxis);
 
-    this.centerTranslation = mat4.fromTranslation(mat4.create(), center);
-    mat4.invert(this.centerTranslation, this.centerTranslation);
+        vec3.cross(xAxis, zAxis, yAxis);
+        vec3.normalize(xAxis, xAxis);
 
-    var vt = vec3.set(vec3.create(), 0, 0, -1.0 * viewDist);
-    this.translation = mat4.fromTranslation(mat4.create(), vt);
+        this.zoomSpeed = zoomSpeed;
+        this.invScreen = vec2.create(1.0 / screenDims[0], 1.0 / screenDims[1]);
 
-    var rotMat = mat3.fromValues(xAxis[0], xAxis[1], xAxis[2],
-        yAxis[0], yAxis[1], yAxis[2],
-        -zAxis[0], -zAxis[1], -zAxis[2]);
-    mat3.transpose(rotMat, rotMat);
-    this.rotation = quat.fromMat3(quat.create(), rotMat);
-    quat.normalize(this.rotation, this.rotation);
+        this.centerTranslation = mat4.translation(center);
+        mat4.invert(this.centerTranslation, this.centerTranslation);
 
-    this.camera = mat4.create();
-    this.invCamera = mat4.create();
-    this.updateCameraMatrix();
-}
+        const vt = vec3.create(0, 0, -1.0 * viewDist);
+        this.translation = mat4.translation(vt);
 
-ArcballCamera.prototype.rotate = function(prevMouse, curMouse) {
-    var mPrev = vec2.set(vec2.create(),
-        clamp(prevMouse[0] * 2.0 * this.invScreen[0] - 1.0, -1.0, 1.0),
-        clamp(1.0 - prevMouse[1] * 2.0 * this.invScreen[1], -1.0, 1.0));
+        const rotMat = mat3.create(xAxis[0], xAxis[1], xAxis[2],
+            yAxis[0], yAxis[1], yAxis[2],
+            -zAxis[0], -zAxis[1], -zAxis[2]);
+        mat3.transpose(rotMat, rotMat);
+        this.rotation = quat.fromMat(rotMat);
+        quat.normalize(this.rotation, this.rotation);
 
-    var mCur = vec2.set(vec2.create(),
-        clamp(curMouse[0] * 2.0 * this.invScreen[0] - 1.0, -1.0, 1.0),
-        clamp(1.0 - curMouse[1] * 2.0 * this.invScreen[1], -1.0, 1.0));
-
-    var mPrevBall = screenToArcball(mPrev);
-    var mCurBall = screenToArcball(mCur);
-    // rotation = curBall * prevBall * rotation
-    this.rotation = quat.mul(this.rotation, mPrevBall, this.rotation);
-    this.rotation = quat.mul(this.rotation, mCurBall, this.rotation);
-
-    this.updateCameraMatrix();
-}
-
-ArcballCamera.prototype.zoom = function(amount) {
-    var vt = vec3.set(vec3.create(), 0.0, 0.0, amount * this.invScreen[1] * this.zoomSpeed);
-    var t = mat4.fromTranslation(mat4.create(), vt);
-    this.translation = mat4.mul(this.translation, t, this.translation);
-    if (this.translation[14] >= -0.2) {
-        this.translation[14] = -0.2;
+        this.camera = mat4.create();
+        this.invCamera = mat4.create();
+        this.updateCameraMatrix();
     }
-    this.updateCameraMatrix();
+
+    rotate (prevMouse, curMouse)
+    {
+        const mPrev = vec2.create(
+            clamp(curMouse[0] * 2.0 * this.invScreen[0] - 1.0, -1.0, 1.0),
+            clamp(1.0 - prevMouse[1] * 2.0 * this.invScreen[1], -1.0, 1.0));
+
+        const mCur = vec2.create(
+            clamp(curMouse[0] * 2.0 * this.invScreen[0] - 1.0, -1.0, 1.0),
+            clamp(1.0 - curMouse[1] * 2.0 * this.invScreen[1], -1.0, 1.0));
+
+        const mPrevBall = screenToArcball(mPrev);
+        const mCurBall = screenToArcball(mCur);
+        // rotation = curBall * prevBall * rotation
+        quat.mul( mPrevBall, this.rotation, this.rotation);
+        quat.mul( mCurBall, this.rotation, this.rotation);
+
+        this.updateCameraMatrix();
+    }
+
+    zoom (amount)
+    {
+        const vt = vec3.create( 0.0, 0.0, amount * this.invScreen[1] * this.zoomSpeed);
+        const t = mat4.translation(vt);
+        mat4.mul(t, this.translation, this.translation);
+        if (this.translation[14] >= -0.2)
+        {
+            this.translation[14] = -0.2;
+        }
+        this.updateCameraMatrix();
+    }
+
+    pan (mouseDelta)
+    {
+        const delta = vec4.create( mouseDelta[0] * this.invScreen[0] * Math.abs(this.translation[14]),
+            mouseDelta[1] * this.invScreen[1] * Math.abs(this.translation[14]), 0, 0);
+        const worldDelta = vec4.transformMat4(delta, this.invCamera);
+        const translation = mat4.translation(worldDelta);
+        mat4.mul(translation, this.centerTranslation, this.centerTranslation);
+        this.updateCameraMatrix();
+    }
+
+    updateCameraMatrix ()
+    {
+        // camera = translation * rotation * centerTranslation
+        const rotMat = mat4.fromQuat(this.rotation);
+        mat4.mul(rotMat, this.centerTranslation, this.camera);
+        mat4.mul(this.translation, this.camera, this.camera);
+        mat4.invert(this.camera, this.invCamera);
+    }
+
+    eyePos ()
+    {
+        return [this.invCamera[12], this.invCamera[13], this.invCamera[14]];
+    }
+
+    eyeDir ()
+    {
+        const dir = vec4.create( 0.0, 0.0, -1.0, 0.0);
+        vec4.transformMat4(dir, this.invCamera, dir);
+        vec4.normalize(dir, dir);
+        return [dir[0], dir[1], dir[2]];
+    }
+
+    upDir ()
+    {
+        const dir = vec4.create( 0.0, 1.0, 0.0, 0.0);
+        vec4.transformMat4(dir, this.invCamera, dir);
+        vec4.normalize(dir, dir);
+        return [dir[0], dir[1], dir[2]];
+    }
 }
 
-ArcballCamera.prototype.pan = function(mouseDelta) {
-    var delta = vec4.set(vec4.create(), mouseDelta[0] * this.invScreen[0] * Math.abs(this.translation[14]),
-        mouseDelta[1] * this.invScreen[1] * Math.abs(this.translation[14]), 0, 0);
-    var worldDelta = vec4.transformMat4(vec4.create(), delta, this.invCamera);
-    var translation = mat4.fromTranslation(mat4.create(), worldDelta);
-    this.centerTranslation = mat4.mul(this.centerTranslation, translation, this.centerTranslation);
-    this.updateCameraMatrix();
-}
-
-ArcballCamera.prototype.updateCameraMatrix = function() {
-    // camera = translation * rotation * centerTranslation
-    var rotMat = mat4.fromQuat(mat4.create(), this.rotation);
-    this.camera = mat4.mul(this.camera, rotMat, this.centerTranslation);
-    this.camera = mat4.mul(this.camera, this.translation, this.camera);
-    this.invCamera = mat4.invert(this.invCamera, this.camera);
-}
-
-ArcballCamera.prototype.eyePos = function() {
-    return [this.invCamera[12], this.invCamera[13], this.invCamera[14]];
-}
-
-ArcballCamera.prototype.eyeDir = function() {
-    var dir = vec4.set(vec4.create(), 0.0, 0.0, -1.0, 0.0);
-    dir = vec4.transformMat4(dir, dir, this.invCamera);
-    dir = vec4.normalize(dir, dir);
-    return [dir[0], dir[1], dir[2]];
-}
-
-ArcballCamera.prototype.upDir = function() {
-    var dir = vec4.set(vec4.create(), 0.0, 1.0, 0.0, 0.0);
-    dir = vec4.transformMat4(dir, dir, this.invCamera);
-    dir = vec4.normalize(dir, dir);
-    return [dir[0], dir[1], dir[2]];
-}
-
-var screenToArcball = function(p) {
-    var dist = vec2.dot(p, p);
-    if (dist <= 1.0) {
-        return quat.set(quat.create(), p[0], p[1], Math.sqrt(1.0 - dist), 0);
-    } else {
-        var unitP = vec2.normalize(vec2.create(), p);
+function screenToArcball (p)
+{
+    const dist = vec2.dot(p, p);
+    if (dist <= 1.0)
+    {
+        return quat.create( p[0], p[1], Math.sqrt(1.0 - dist), 0);
+    } else
+    {
+        const unitP = vec2.normalize(p);
         // cgmath is w, x, y, z
         // glmatrix is x, y, z, w
-        return quat.set(quat.create(), unitP[0], unitP[1], 0, 0);
+        return quat.create( unitP[0], unitP[1], 0, 0);
     }
 }
-var clamp = function(a, min, max) {
+
+function clamp (a, min, max)
+{
     return a < min ? min : a > max ? max : a;
 }
-
-var pointDist = function(a, b) {
-    var v = [b[0] - a[0], b[1] - a[1]];
-    return Math.sqrt(Math.pow(v[0], 2.0) + Math.pow(v[1], 2.0));
-}
-

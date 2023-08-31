@@ -1,9 +1,9 @@
 /* The controller can register callbacks for various events on a canvas:
  *
- * mousemove: function(prevMouse, curMouse, evt)
+ * mousemove: function(prevMouse, this.curMouse, evt)
  *     receives both regular mouse events, and single-finger drags (sent as a left-click),
  *
- * press: function(curMouse, evt)
+ * press: function(this.curMouse, evt)
  *     receives mouse click and touch start events
  *
  * wheel: function(amount)
@@ -15,115 +15,158 @@
  * twoFingerDrag: function(dragVector)
  *     two finger drag, receives the drag movement amount
  */
-var Controller = function() {
-    this.mousemove = null;
-    this.press = null;
-    this.wheel = null;
-    this.twoFingerDrag = null;
-    this.pinch = null;
-}
 
-Controller.prototype.registerForCanvas = function(canvas) {
-    var prevMouse = null;
-    var mouseState = [false, false];
-    var self = this;
-    canvas.addEventListener("mousemove", function(evt) {
-        evt.preventDefault();
-        var rect = canvas.getBoundingClientRect();
-        var curMouse = [evt.clientX - rect.left, evt.clientY - rect.top];
-        if (!prevMouse) {
-            prevMouse = [evt.clientX - rect.left, evt.clientY - rect.top];
-        } else if (self.mousemove) {
-            self.mousemove(prevMouse, curMouse, evt);
+import {vec2} from "./wgpu-matrix.module.js";
+export class Controller
+{
+    constructor()
+    {
+        this.canvas = null;
+        this.registeredEvents = [];
+
+        this.mousemove = null;
+        this.press = null;
+        this.wheel = null;
+
+        this.prevMouse = vec2.create();
+        this.curMouse = vec2.create();
+        this.touches = {};
+        this.twoFingerDrag = null;
+        this.pinch = null;
+    }
+
+    registerForCanvas = function (canvas)
+    {
+        this.canvas = canvas;
+
+        canvas.addEventListener("mousemove", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onMouseMove.bind(this)});});
+        canvas.addEventListener("mousedown", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onMouseDown.bind(this)});});
+        canvas.addEventListener("wheel", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onMouseWheel.bind(this)});});
+        canvas.addEventListener("touchstart", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchStart.bind(this)});});
+        canvas.addEventListener("touchmove", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchMove.bind(this)});});
+        canvas.addEventListener("touchcancel", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchEnd.bind(this)});});
+        canvas.addEventListener("touchend", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchEnd.bind(this)});});
+        canvas.oncontextmenu = (e) => {evt.preventDefault();};
+    }
+
+    processEvents ()
+    {
+        for (const event of this.registeredEvents)
+        {
+            event.callback(event.jsEvent);
         }
-        prevMouse = curMouse;
-    });
+        this.registeredEvents.length = 0;
+    }
 
-    canvas.addEventListener("mousedown", function(evt) {
+    onMouseMove (evt)
+    {
         evt.preventDefault();
-        var rect = canvas.getBoundingClientRect();
-        var curMouse = [evt.clientX - rect.left, evt.clientY - rect.top];
-        if (self.press) {
-            self.press(curMouse, evt);
+        const rect = this.canvas.getBoundingClientRect();
+        vec2.set(evt.clientX - rect.left, evt.clientY - rect.top, this.curMouse);
+
+        if (this.mousemove)
+        {
+            this.mousemove(this.prevMouse, this.curMouse, evt);
         }
-    });
+        this.prevMouse.set(this.curMouse);
+    }
 
-    canvas.addEventListener("wheel", function(evt) {
+    onMouseDown (evt)
+    {
         evt.preventDefault();
-        if (self.wheel) {
-            self.wheel(-evt.deltaY);
+        const rect = this.canvas.getBoundingClientRect();
+        vec2.set(evt.clientX - rect.left, evt.clientY - rect.top, this.curMouse);
+        if (this.press)
+        {
+            this.press(this.curMouse, evt);
         }
-    });
+    }
 
-    canvas.oncontextmenu = function (evt) {
+    onMouseWheel (evt)
+    {
         evt.preventDefault();
-    };
+        if (this.wheel)
+        {
+            this.wheel(-evt.deltaY);
+        }
+    }
 
-    var touches = {};
-    canvas.addEventListener("touchstart", function(evt) {
-        var rect = canvas.getBoundingClientRect();
+    onTouchStart (evt)
+    {
+        const rect = this.canvas.getBoundingClientRect();
         evt.preventDefault();
-        for (var i = 0; i < evt.changedTouches.length; ++i) {
-            var t = evt.changedTouches[i];
-            touches[t.identifier] = [t.clientX - rect.left, t.clientY - rect.top];
-            if (evt.changedTouches.length == 1 && self.press) {
-                self.press(touches[t.identifier], evt);
+        for (let i = 0; i < evt.changedTouches.length; ++i)
+        {
+            const t = evt.changedTouches[i];
+            this.touches[t.identifier] = [t.clientX - rect.left, t.clientY - rect.top];
+            if (evt.changedTouches.length == 1 && this.press)
+            {
+                this.press(this.touches[t.identifier], evt);
             }
         }
-    });
+    }
 
-    canvas.addEventListener("touchmove", function(evt) {
+    onTouchMove (evt)
+    {
         evt.preventDefault();
-        var rect = canvas.getBoundingClientRect();
-        var numTouches = Object.keys(touches).length;
+        const rect = this.canvas.getBoundingClientRect();
+        const numTouches = Object.keys(this.touches).length;
         // Single finger to rotate the camera
-        if (numTouches == 1) {
-            if (self.mousemove) {
-                var t = evt.changedTouches[0];
-                var prevTouch = touches[t.identifier];
-                var curTouch = [t.clientX - rect.left, t.clientY - rect.top];
+        if (numTouches == 1)
+        {
+            if (this.mousemove)
+            {
+                const t = evt.changedTouches[0];
+                const prevTouch = this.touches[t.identifier];
+                const curTouch = [t.clientX - rect.left, t.clientY - rect.top];
                 evt.buttons = 1;
-                self.mousemove(prevTouch, curTouch, evt);
+                this.mousemove(prevTouch, curTouch, evt);
             }
-        } else {
-            var curTouches = {};
-            for (var i = 0; i < evt.changedTouches.length; ++i) {
-                var t = evt.changedTouches[i];
+        }
+        else
+        {
+            const curTouches = {};
+            for (let i = 0; i < evt.changedTouches.length; ++i)
+            {
+                const t = evt.changedTouches[i];
                 curTouches[t.identifier] = [t.clientX - rect.left, t.clientY - rect.top];
             }
 
             // If some touches didn't change make sure we have them in
             // our curTouches list to compute the pinch distance
             // Also get the old touch points to compute the distance here
-            var oldTouches = [];
-            for (t in touches) {
-                if (!(t in curTouches)) {
-                    curTouches[t] = touches[t];
+            const oldTouches = [];
+            for (t in this.touches)
+            {
+                if (!(t in curTouches))
+                {
+                    curTouches[t] = this.touches[t];
                 }
-                oldTouches.push(touches[t]);
+                oldTouches.push(this.touches[t]);
             }
 
-            var newTouches = [];
-            for (t in curTouches) {
+            const newTouches = [];
+            for (t in curTouches)
+            {
                 newTouches.push(curTouches[t]);
             }
 
             // Determine if the user is pinching or panning
-            var motionVectors = [
-                vec2.set(vec2.create(), newTouches[0][0] - oldTouches[0][0],
+            const motionVectors = [
+                vec2.create(newTouches[0][0] - oldTouches[0][0],
                     newTouches[0][1] - oldTouches[0][1]),
-                vec2.set(vec2.create(), newTouches[1][0] - oldTouches[1][0],
+                vec2.create(newTouches[1][0] - oldTouches[1][0],
                     newTouches[1][1] - oldTouches[1][1])
             ];
             var motionDirs = [vec2.create(), vec2.create()];
-            vec2.normalize(motionDirs[0], motionVectors[0]);
-            vec2.normalize(motionDirs[1], motionVectors[1]);
+            vec2.normalize(motionVectors[0], motionDirs[0]);
+            vec2.normalize(motionVectors[1], motionDirs[1]);
 
-            var pinchAxis = vec2.set(vec2.create(), oldTouches[1][0] - oldTouches[0][0],
+            var pinchAxis = vec2.create(oldTouches[1][0] - oldTouches[0][0],
                 oldTouches[1][1] - oldTouches[0][1]);
             vec2.normalize(pinchAxis, pinchAxis);
 
-            var panAxis = vec2.lerp(vec2.create(), motionVectors[0], motionVectors[1], 0.5);
+            var panAxis = vec2.lerp(motionVectors[0], motionVectors[1], 0.5);
             vec2.normalize(panAxis, panAxis);
 
             var pinchMotion = [
@@ -138,38 +181,45 @@ Controller.prototype.registerForCanvas = function(canvas) {
             // If we're primarily moving along the pinching axis and in the opposite direction with
             // the fingers, then the user is zooming.
             // Otherwise, if the fingers are moving along the same direction they're panning
-            if (self.pinch && Math.abs(pinchMotion[0]) > 0.5 && Math.abs(pinchMotion[1]) > 0.5
+            if (this.pinch && Math.abs(pinchMotion[0]) > 0.5 && Math.abs(pinchMotion[1]) > 0.5
                 && Math.sign(pinchMotion[0]) != Math.sign(pinchMotion[1]))
             {
                 // Pinch distance change for zooming
-                var oldDist = pointDist(oldTouches[0], oldTouches[1]);
-                var newDist = pointDist(newTouches[0], newTouches[1]);
-                self.pinch(newDist - oldDist);
-            } else if (self.twoFingerDrag && Math.abs(panMotion[0]) > 0.5 && Math.abs(panMotion[1]) > 0.5
+                const oldDist = Controller.pointDist(oldTouches[0], oldTouches[1]);
+                const newDist = Controller.pointDist(newTouches[0], newTouches[1]);
+                this.pinch(newDist - oldDist);
+            }
+            else if (this.twoFingerDrag && Math.abs(panMotion[0]) > 0.5 && Math.abs(panMotion[1]) > 0.5
                 && Math.sign(panMotion[0]) == Math.sign(panMotion[1]))
             {
                 // Pan by the average motion of the two fingers
-                var panAmount = vec2.lerp(vec2.create(), motionVectors[0], motionVectors[1], 0.5);
+                const panAmount = vec2.lerp(motionVectors[0], motionVectors[1], 0.5);
                 panAmount[1] = -panAmount[1];
-                self.twoFingerDrag(panAmount);
+                this.twoFingerDrag(panAmount);
             }
         }
 
         // Update the existing list of touches with the current positions
-        for (var i = 0; i < evt.changedTouches.length; ++i) {
-            var t = evt.changedTouches[i];
-            touches[t.identifier] = [t.clientX - rect.left, t.clientY - rect.top];
-        }
-    });
-
-    var touchEnd = function(evt) {
-        evt.preventDefault();
-        for (var i = 0; i < evt.changedTouches.length; ++i) {
-            var t = evt.changedTouches[i];
-            delete touches[t.identifier];
+        for (let i = 0; i < evt.changedTouches.length; ++i)
+        {
+            const t = evt.changedTouches[i];
+            this.touches[t.identifier] = [t.clientX - rect.left, t.clientY - rect.top];
         }
     }
-    canvas.addEventListener("touchcancel", touchEnd);
-    canvas.addEventListener("touchend", touchEnd);
-}
 
+    onTouchEnd = function (evt)
+    {
+        evt.preventDefault();
+        for (let i = 0; i < evt.changedTouches.length; ++i)
+        {
+            const t = evt.changedTouches[i];
+            delete this.touches[t.identifier];
+        }
+    }
+
+    static pointDist (a, b)
+    {
+        const v = [b[0] - a[0], b[1] - a[1]];
+        return Math.sqrt(Math.pow(v[0], 2.0) + Math.pow(v[1], 2.0));
+    }
+}
