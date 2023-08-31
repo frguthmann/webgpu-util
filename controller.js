@@ -207,7 +207,7 @@ export class Controller
         }
     }
 
-    onTouchEnd = function (evt)
+    onTouchEnd (evt)
     {
         evt.preventDefault();
         for (let i = 0; i < evt.changedTouches.length; ++i)
