@@ -5,7 +5,7 @@
  * coordinates.
  */
 
-import {vec2, vec3, vec4, mat3, mat4, quat} from "./libs/wgpu-matrix/wgpu-matrix.module.js";
+import {vec2, vec3, vec4, mat3, mat4, quat} from "./wgpu-matrix.module.js";
 
 export class ArcballCamera 
 {
