@@ -39,14 +39,14 @@ export class Controller
     {
         this.canvas = canvas;
 
-        canvas.addEventListener("mousemove", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onMouseMove.bind(this)});});
-        canvas.addEventListener("mousedown", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onMouseDown.bind(this)});});
-        canvas.addEventListener("wheel", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onMouseWheel.bind(this)});});
-        canvas.addEventListener("touchstart", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchStart.bind(this)});});
-        canvas.addEventListener("touchmove", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchMove.bind(this)});});
+        canvas.addEventListener("mousemove",   (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onMouseMove.bind(this)});});
+        canvas.addEventListener("mousedown",   (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onMouseDown.bind(this)});});
+        canvas.addEventListener("wheel",       (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onMouseWheel.bind(this)});});
+        canvas.addEventListener("touchstart",  (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchStart.bind(this)});});
+        canvas.addEventListener("touchmove",   (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchMove.bind(this)});});
         canvas.addEventListener("touchcancel", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchEnd.bind(this)});});
-        canvas.addEventListener("touchend", (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchEnd.bind(this)});});
-        canvas.oncontextmenu = (e) => {evt.preventDefault();};
+        canvas.addEventListener("touchend",    (e) => {this.registeredEvents.push({jsEvent: e, callback: this.onTouchEnd.bind(this)});});
+        canvas.addEventListener('contextmenu', (e) => {e.preventDefault();}, false);
     }
 
     processEvents ()
